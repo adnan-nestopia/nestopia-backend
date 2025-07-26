@@ -7,13 +7,14 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
 
-@app.before_first_request
+@app.before_request
 def create_tables():
     db.create_all()
     if Room.query.count() == 0:
         for i in range(1, 9):
             db.session.add(Room(id=i))
         db.session.commit()
+
 
 @app.route('/')
 def home():
