@@ -1,61 +1,42 @@
 from flask import Flask, jsonify, request
+from models import db, Room, Booking
 
 app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///nestopia.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Room data: 8 simple rooms
-rooms = [
-    {"id": 1, "price": 120, "available": True},
-    {"id": 2, "price": 180, "available": True},
-    {"id": 3, "price": 90, "available": True},
-    {"id": 4, "price": 200, "available": True},
-    {"id": 5, "price": 150, "available": True},
-    {"id": 6, "price": 110, "available": True},
-    {"id": 7, "price": 135, "available": True},
-    {"id": 8, "price": 100, "available": True}
-]
+db.init_app(app)
 
-# In-memory booking and contact storage
-bookings = []
-messages = []
+@app.before_first_request
+def create_tables():
+    db.create_all()
+    if Room.query.count() == 0:
+        for i in range(1, 9):
+            db.session.add(Room(id=i))
+        db.session.commit()
 
 @app.route('/')
 def home():
-    return '🏡 Welcome to Nestopia! Your homestay backend is live.'
+    return "🏡 Welcome to Nestopia! Your homestay backend is live."
 
-@app.route('/rooms', methods=['GET'])
-def get_rooms():
-    return jsonify({"rooms": rooms})
+@app.route('/rooms')
+def rooms():
+    rooms = Room.query.all()
+    return jsonify([{'room_id': r.id, 'booked': r.booked} for r in rooms])
 
 @app.route('/book', methods=['POST'])
-def book_room():
-    data = request.json
-    room_id = data.get("room_id")
-    guest_name = data.get("guest_name")
-    checkin = data.get("checkin_date")
-    checkout = data.get("checkout_date")
-
-    for room in rooms:
-        if room["id"] == room_id:
-            if room["available"]:
-                room["available"] = False
-                booking = {
-                    "room_id": room_id,
-                    "guest_name": guest_name,
-                    "checkin_date": checkin,
-                    "checkout_date": checkout
-                }
-                bookings.append(booking)
-                return jsonify({"message": "Booking successful!", "booking": booking}), 200
-            else:
-                return jsonify({"error": "Room is already booked"}), 400
-
-    return jsonify({"error": "Room not found"}), 404
-
-@app.route('/contact', methods=['POST'])
-def contact():
-    data = request.json
-    messages.append(data)
-    return jsonify({"message": "Thank you for contacting us!", "data": data}), 200
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+def book():
+    data = request.get_json()
+    room = Room.query.get(data['room_id'])
+    if room and not room.booked:
+        room.booked = True
+        booking = Booking(
+            room_id=room.id,
+            guest_name=data['guest_name'],
+            checkin_date=data['checkin_date'],
+            checkout_date=data['checkout_date']
+        )
+        db.session.add(booking)
+        db.session.commit()
+        return jsonify({'message': 'Booking successful'})
+    return jsonify({'message': 'Room is already booked or not found'}), 400
